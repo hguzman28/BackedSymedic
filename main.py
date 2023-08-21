@@ -3152,7 +3152,7 @@ def conexion_postgres():
 @app.post('/laborden/insert') 
 def insert_data(data: dict):
         
-	query='insert into laborden(fecorden,estado,codage,numorden,agefaccli,numfaccli,tipide,codpac,codemp,contpac,interlab,prio,codmedico,nivpac,copago,cuotam,bono,descpac,abopac,coddiagnostico,totemp,usuario,dur,descpacp,factura,edadf,facturar,pendaprob,embar,fechasol,usuvbo,horvbo,idbono,totpac) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'
+	query='insert into laborden(fecorden,codage,numorden,agefaccli,numfaccli,tipide,codpac,codemp,contpac,interlab,prio,codmedico,nivpac,copago,cuotam,bono,descpac,abopac,coddiagnostico,totemp,usuario,dur,descpacp,factura,fechasol,usuvbo,horvbo,idbono,totpac) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)'
 	sdk.insertPostgres(query, data,'prd') 
 # Endpoint delete 
 @app.delete('/laborden/delete/{id}') 
@@ -3175,7 +3175,7 @@ def conexion_postgres():
 # Endpoint insert 
 @app.post('/labordendet/insert') 
 def insert_data(data: dict): 
-	query='insert into labordendet(cdgexamen,valor,coddep,desc1,desc2,desc3,cuotam,ordenam,partic,corte,pend,codcombo,subtemp,seq) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)' 
+	query='insert into labordendet(cdgexamen,valor,coddep,desc1,desc2,desc3,cuotam,ordenam,partic,corte,pend,codcombo,subtemp,seq,codage,numorden,subtpac) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)' 
 	sdk.insertPostgres(query, data,'prd') 
 # Endpoint delete 
 @app.delete('/labordendet/delete/{id}') 
@@ -3198,7 +3198,7 @@ def conexion_postgres():
 # Endpoint insert 
 @app.post('/paciente/insert') 
 def insert_data(data: dict): 
-	query='insert into paciente(tipide,codpac,nompac,nompac2,apepac,apepac2,sexo,vincpac,fecnac,fecing,codocu,deppac,ciupac,gruposang,codemp,coddiagnostico,contpac,planben,codundnegocio,nivpac,obs,dir,tel,remite,cedaco,nomaco,apeaco,telaco,diraco,empcodi,celular,acofam) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)' 
+	query='insert into paciente(tipide,codpac,nompac,nompac2,apepac,apepac2,sexo,vincpac,fecnac,fecing,codocu,deppac,ciupac,gruposang,codemp,coddiagnostico,contpac,planben,codundnegocio,nivpac,obs,dir,tel,remite,cedaco,nomaco,apeaco,telaco,diraco,celular,acofam,id) values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)' 
 	sdk.insertPostgres(query, data,'prd') 
 # Endpoint delete 
 @app.delete('/paciente/delete/{id}') 
