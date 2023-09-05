@@ -4,7 +4,7 @@ import os
 from mangum import Mangum
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
-
+from pydantic import BaseModel
 
 ##############################################################################
 #   Ambiente                                                    ##############
@@ -27,6 +27,20 @@ app.add_middleware(
     allow_headers=["*"],
 )   
 
+class UserCredentials(BaseModel):
+    usuario: str
+    clave: str
+
+@app.post("/validate-credentials")
+def validate_credentials(credentials: UserCredentials):
+    query = f"SELECT usuario FROM public.usuarios WHERE usuario = '{credentials.usuario}' AND clave = '{credentials.clave}'"
+    response_query = sdk.executeQueryPostgresSelect(query, str(stage))
+    
+    if response_query:    
+        return {"valid": True}
+    else:
+        return {"valid": False}
+    
 
 @app.get("/hello/{company}")
 def hello_world(company: str):
