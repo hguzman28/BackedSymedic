@@ -1,4 +1,4 @@
-service: "lambda-backed-hg-dev"
+service: "lambda-backed-hg-dv"
 
 package:
   individually: true

@@ -75,10 +75,10 @@ def getConnectionPostgres(environment):
     try:
 
         conn = psycopg2.connect(
-            host="localhost",
+            host="symedic.cdptjwpihq8q.us-east-1.rds.amazonaws.com",
             database="postgres",
             user="postgres",
-            password="Abcd.1234")
+            password="symedic**")
         return conn
 
     except Exception as e:

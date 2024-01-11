@@ -102,7 +102,7 @@
               "Fn::Join": [
                 "-",
                 [
-                  "lambda-backed-hg-dev",
+                  "lambda-backed-hg-dv",
                   "dev",
                   "lambda"
                 ]
@@ -144,7 +144,7 @@
           "Fn::Join": [
             "-",
             [
-              "lambda-backed-hg-dev",
+              "lambda-backed-hg-dv",
               "dev",
               {
                 "Ref": "AWS::Region"
@@ -159,7 +159,7 @@
       "Type": "AWS::Lambda::Function",
       "Properties": {
         "Code": {
-          "ImageUri": "864673161229.dkr.ecr.us-east-1.amazonaws.com/serverless-lambda-backed-hg-dev-dev@sha256:9ab75c8fcaa846823382af1f88b73f43239030c68127f8a91956ef9e94162a12"
+          "ImageUri": "359180331944.dkr.ecr.us-east-1.amazonaws.com/serverless-lambda-backed-hg-dv-dev@sha256:6ffd9afb9bcbaa0a030d011af5b7a037acf7572289796c8511ff76b4b44cc8d9"
         },
         "PackageType": "Image",
         "FunctionName": "lambda-backed-dev",
@@ -176,20 +176,20 @@
         "AppLogGroup"
       ]
     },
-    "AppLambdaVersionhUrIRdkChxvQ3k8EIYUUBpeJwmqvTs33DLvxQmU19Oo": {
+    "AppLambdaVersionAARxFa9RbrkvC8LuK5N3wVOsCDZShkKRegqXkXS8": {
       "Type": "AWS::Lambda::Version",
       "DeletionPolicy": "Retain",
       "Properties": {
         "FunctionName": {
           "Ref": "AppLambdaFunction"
         },
-        "CodeSha256": "9ab75c8fcaa846823382af1f88b73f43239030c68127f8a91956ef9e94162a12"
+        "CodeSha256": "6ffd9afb9bcbaa0a030d011af5b7a037acf7572289796c8511ff76b4b44cc8d9"
       }
     },
     "ApiGatewayRestApi": {
       "Type": "AWS::ApiGateway::RestApi",
       "Properties": {
-        "Name": "dev-lambda-backed-hg-dev",
+        "Name": "dev-lambda-backed-hg-dv",
         "EndpointConfiguration": {
           "Types": [
             "REGIONAL"
@@ -259,7 +259,7 @@
         "AppLambdaPermissionApiGateway"
       ]
     },
-    "ApiGatewayDeployment1691532277560": {
+    "ApiGatewayDeployment1699698114755": {
       "Type": "AWS::ApiGateway::Deployment",
       "Properties": {
         "RestApiId": {
@@ -315,16 +315,16 @@
         "Ref": "ServerlessDeploymentBucket"
       },
       "Export": {
-        "Name": "sls-lambda-backed-hg-dev-dev-ServerlessDeploymentBucketName"
+        "Name": "sls-lambda-backed-hg-dv-dev-ServerlessDeploymentBucketName"
       }
     },
     "AppLambdaFunctionQualifiedArn": {
       "Description": "Current Lambda function version",
       "Value": {
-        "Ref": "AppLambdaVersionhUrIRdkChxvQ3k8EIYUUBpeJwmqvTs33DLvxQmU19Oo"
+        "Ref": "AppLambdaVersionAARxFa9RbrkvC8LuK5N3wVOsCDZShkKRegqXkXS8"
       },
       "Export": {
-        "Name": "sls-lambda-backed-hg-dev-dev-AppLambdaFunctionQualifiedArn"
+        "Name": "sls-lambda-backed-hg-dv-dev-AppLambdaFunctionQualifiedArn"
       }
     },
     "ServiceEndpoint": {
@@ -350,7 +350,7 @@
         ]
       },
       "Export": {
-        "Name": "sls-lambda-backed-hg-dev-dev-ServiceEndpoint"
+        "Name": "sls-lambda-backed-hg-dv-dev-ServiceEndpoint"
       }
     }
   }
