@@ -8,6 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 import re
 
+# openai ************************************************************
+#import os
+#import openai
+#openai.api_key = "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"
+
 #
 #class User(BaseModel):
 #    name: str
@@ -568,7 +573,11 @@ def update_data(data: dict,id:str):
     # tipores: mitipores[pos],
     # unicodi: miunicodi[pos]
     va_resultado = data['resultado']
-    va_usuario = data['usuario']
+    va_usuario = data['usuario'] # no se porque aca se viene todo el objeto usuario q viene de cognito
+
+    print('usuario:')
+    print(va_usuario)
+
     va_age = data['age']
     va_ord = data['ord']
     va_seq = data['seq']
@@ -580,23 +589,27 @@ def update_data(data: dict,id:str):
     else:
         va_unidad = data['unicodi']
     va_resuformula = 0
+    resformula = [] #para almacenar los resultados de analitos de formula
+    temporal = []
+    formula = {} #para almacenar cada registro de analito formulado
     cadresnum = ''
     if (isfloat(va_resultado)):
          cadresnum = ",resnum="+va_resultado
     query = ''
     # en 202311 se establece que los id no pueden ser todos cero, entonces se adopta la nomenclatura 0_1 0_2 0_3 ...
-    print(" subcadena de id " + id[0:2]);
-    if (id[0:2] != "0_"):            
-        query="update resultado set resultado='"+va_resultado + cadresnum + "',usuario='"+va_usuario+"',fecha=CURRENT_TIMESTAMP where id=" + id
+    print(" subcadena de id " + id[0:2])
+    if (id[0:2] != "0_"): # registro de resultado ya existe            
+        query="update resultado set resultado='"+va_resultado + "'" + cadresnum + ",usuario='"+va_usuario+"',fecha=CURRENT_TIMESTAMP where id=" + id
         print(query)
         sdk.updatePostgres(query, data,"prd")
-    else:
-        if (not isfloat(va_resultado)):
+    else: # no existe el registro de resultado
+        if (not isfloat(va_resultado)): # el resultado no es numerico
             query ="insert into resultado (resultado,usuario,codage,numorden,seq,cdgexamen,cdganalisis,tipores,unicodi) "
-            query=query + " values ('"+va_resultado+"','"+va_usuario+"','"+va_age+"','"+va_ord+"','"+va_seq+"','"+va_examen+"','"+va_anali+"','"+va_tipores+"','"+va_unidad+"') "
-        else:
+            query = query + " values ('"+va_resultado+"','" + va_usuario + "','"+va_age+"','"+va_ord+"','"+va_seq+"','"+va_examen+"','"+va_anali+"','"+va_tipores+"','"+va_unidad+"') "
+        else: # el resultado es numerico
             query ="insert into resultado (resultado,resnum,usuario,codage,numorden,seq,cdgexamen,cdganalisis,tipores,unicodi) "
-            query=query + " values ('"+va_resultado+"'," + va_resultado + ",'"+va_usuario+"','"+va_age+"','"+va_ord+"','"+va_seq+"','"+va_examen+"','"+va_anali+"','"+va_tipores+"','"+va_unidad+"') "
+            query = query + " values ('"+str(va_resultado)+"'," + str(va_resultado) + ",'" + va_usuario + "','"+va_age+"','"+str(va_ord)+"','"+str(va_seq) +"','"+va_examen+"','"+va_anali+"','"+va_tipores+"','"+va_unidad+"') " 
+        #
         print(query)
         sdk.insertPostgres(query, data,"prd")
 	# Acto seguido se verifica si ese analisis es insumo para calcular otros
@@ -608,27 +621,35 @@ def update_data(data: dict,id:str):
     if (va_esparam > 0):
         # busco todos los anilisis tipo formula de ese examen
         va_analisisform = ''
-        qry = "select a.cdganalisis,a.unicodi from analisis a where a.cdgexamen='" + va_examen + "' and a.tipores='F'"
+        qry = "select a.cdganalisis,a.unicodi, a.orden from analisis a where a.cdgexamen='" + va_examen + "' and a.tipores='F'"
         response_fml = sdk.executeQueryPostgresSelect(qry, str(stage))
         va_analisisform = ''
         for objf in response_fml:
             va_analisisform = objf['cdganalisis']
+            va_ordenf = objf['orden'] # orden del analito formulado
+            print("calculo para analito formulado " + va_analisisform)
             va_unicodif = objf['unicodi']
-            va_resuformula = calcula_formula(va_age,va_ord,va_anali) # se debe llamar para cada analisis formula de la orden
+            va_resuformula = calcula_formula(va_age,va_ord,va_analisisform) # se debe llamar para cada analisis formula de la orden
             if (va_resuformula != ''):
-                qry = "select count(*) tot from resultado where codage='"+va_age+"' and numorden="+va_ord+" and cdganalisis='" + va_anali+"' and seq="+va_seq
+                formula = {"orden": va_ordenf, "analito":va_analisisform,"seq":va_seq,"res":str(va_resuformula)} #configuramos registro formulado
+                resformula.append(formula)   
+                #resformula = temporal
+                qry = "select count(*) tot from resultado where codage='"+va_age+"' and numorden="+va_ord+" and cdganalisis='" + va_analisisform+"' and seq="+va_seq
                 response_r = sdk.executeQueryPostgresSelect(qry, str(stage))
                 va_resu_prev = 0
                 for objr in response_r:
                     va_resu_prev = objr['tot']
-                    if (va_resu_prev == 0): # no esta el res de fmla aun
-                        qry = "update resultado set resultado = "+va_resuformula+",resnum="+ va_resuformula +" where codage='"+va_age+"' and numorden="+va_ord+" and cdganalisis='" + va_analisisform +"' and seq="+va_seq
+                    if (va_resu_prev > 0): # no esta el res de fmla aun
+                        qry = "update resultado set resnum="+ str(va_resuformula) + ",resultado = "+str(va_resuformula) + " where codage='"+va_age+"' and numorden="+str(va_ord)+" and cdganalisis='" + va_analisisform +"' and seq="+str(va_seq)
                         sdk.updatePostgres(qry, data,"prd")
                     else:
-                        qry="insert into resultado (resultado,usuario,codage,numorden,seq,cdgexamen,cdganalisis,tipores,unicodi) "
-                        query=query + " values ('"+ va_resuformula +"','"+ va_usuario +"','"+ va_age + "',"+ va_ord + ","+ va_seq +",'" + va_examen + "' ,'"+ va_analisisform +"','F','" + va_unicodif + "') "
-                        sdk.insertPostgres(qry, data,"prd")
-    return {"statusCode": 200, "resultado": "success","esparam":va_esparam}
+                        if (va_unicodif == None):
+                            va_unicodif = '*'
+                        query="insert into resultado (resultado, resnum, usuario,codage,numorden,seq,cdgexamen,cdganalisis,tipores,unicodi) "
+                        query=query + " values ('"+ str(va_resuformula) +"',"+ str(va_resuformula) +",'"+ va_usuario +"','"+ va_age + "'," + str(va_ord) + ","+ str(va_seq) +",'" + va_examen + "' ,'"+ va_analisisform +"','F','" + va_unicodif + "') "
+                        print(query)
+                        sdk.insertPostgres(query, data,"prd")
+    return {"statusCode": 200, "resultado": "success","esparam":va_esparam,"resformula":resformula}
 
 #************************* funcion para calcular formulas de una orden
 def calcula_formula(age: str,ord:str, anali:str):
@@ -725,170 +746,170 @@ def calcula_formula(age: str,ord:str, anali:str):
         r22010004 = 0
 
 
-        qry = "select sum( CASE WHEN cdganalisis='24660010' THEN coalesce(resnum,0) else NULL END ) r24660010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24660015' THEN coalesce(resnum,0) else NULL end) r24660015, "
-        qry = qry + " sum( CASE WHEN cdganalisis='24660020' THEN coalesce(resnum,0) else NULL end) r24660020,  "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24630010' THEN coalesce(resnum,0) else NULL END ) r24630010,  "
-        qry = qry + " sum( CASE WHEN cdganalisis='24630015' THEN coalesce(resnum,0) else null END ) r24630015,  "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24630020' THEN coalesce(resnum,0) else NULL end ) r24630020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24630030' THEN coalesce(resnum,0) else NULL END ) r24630030, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24630060' THEN coalesce(resnum,0) else NULL END ) r24630060, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24630260' THEN coalesce(resnum,0) else NULL END ) r24630260, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640010' THEN coalesce(resnum,0) else NULL END ) r24640010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640015' THEN coalesce(resnum,0) else NULL END ) r24640015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640020' THEN coalesce(resnum,0) else NULL end )  r24640020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640030' THEN coalesce(resnum,0) else NULL END ) r24640030, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640060' THEN coalesce(resnum,0) else NULL END ) r24640060, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24640260' THEN coalesce(resnum,0) else null END ) r24640260, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650010' THEN coalesce(resnum,0) else NULL END ) r24650010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650015' THEN coalesce(resnum,0) else null END) r24650015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650020' THEN coalesce(resnum,0) else null END) r24650020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650030' THEN coalesce(resnum,0) else null END) r24650030, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650060' THEN coalesce(resnum,0) else NULL end) r24650060, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24650260' THEN coalesce(resnum,0) else NULL END ) r24650260, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24660030' THEN coalesce(resnum,0) else NULL end) r24660030, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='24660260' THEN coalesce(resnum,0) else NULL end ) r24660260, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100010' THEN coalesce(resnum,0) else NULL END ) r34100010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100025' THEN coalesce(resnum,0) else NULL END ) r34100025, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100015' THEN coalesce(resnum,0) else NULL END ) r34100015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100020' THEN coalesce(resnum,0) else NULL END ) r34100020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100060' THEN coalesce(resnum,0) else NULL END ) r34100060, "
-        qry = qry + " sum( CASE WHEN cdganalisis='34100035' THEN coalesce(resnum,0) else NULL END ) r34100035, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34100045' THEN coalesce(resnum,0) else NULL END ) r34100045, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170010' THEN coalesce(resnum,0) else NULL END ) r34170010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170025' THEN coalesce(resnum,0) else NULL end ) r34170025, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170015' THEN coalesce(resnum,0) else NULL end ) r34170015,  "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170020' THEN coalesce(resnum,0) else null end ) r34170020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170060' THEN coalesce(resnum,0) else null END) r34170060, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170035' THEN coalesce(resnum,0) else null end ) r34170035, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34170045' THEN coalesce(resnum,0) else null end ) r34170045, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50340005' THEN coalesce(resnum,0) else null end ) r50340005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50350010' THEN coalesce(resnum,0) else null END) r50350010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50350020' THEN coalesce(resnum,0) else null END ) r50350020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50700004' THEN coalesce(resnum,0) else null end ) r50700004, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50700010' THEN coalesce(resnum,0) else null END) r50700010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900005' THEN coalesce(resnum,0) else null end ) r50900005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900004' THEN coalesce(resnum,0) else null END) r50900004, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900010' THEN coalesce(resnum,0) else null end ) r50900010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900015' THEN coalesce(resnum,0) else null end ) r50900015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900020' THEN coalesce(resnum,0) else null end ) r50900020, " 
-        qry = qry + " sum(  CASE WHEN cdganalisis='50900025' THEN coalesce(resnum,0) else null end ) r50900025, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='25300020' THEN coalesce(resnum,0) else null end ) r25300020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51350005' THEN coalesce(resnum,0) else null end ) r51350005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51350010' THEN coalesce(resnum,0) else NULL end) r51350010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51350050' THEN coalesce(resnum,0) else NULL end) r50250050, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51600010' THEN coalesce(resnum,0) else NULL end) r51600010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50300005' THEN coalesce(resnum,0) else NULL end) r50300005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50300015' THEN coalesce(resnum,0) else NULL end) r50300015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='31150100' THEN coalesce(resnum,0) else NULL end) r31150100, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='31150110' THEN coalesce(resnum,0) else NULL end) r31150110, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='31150080' THEN coalesce(resnum,0) else NULL end) r31150080, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='50390010' THEN coalesce(resnum,0) else NULL end) r50390010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51270020' THEN coalesce(resnum,0) else NULL end) r51270020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51270030' THEN coalesce(resnum,0) else NULL end) r51270030, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51270010' THEN coalesce(resnum,0) else NULL end) r51270010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51280010' THEN coalesce(resnum,0) else NULL end) r51280010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51280020' THEN coalesce(resnum,0) else NULL end) r51280020, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='52350010' THEN coalesce(resnum,0) else NULL end) r52350010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='52350020' THEN coalesce(resnum,0) else NULL end ) r52350020, " 
-        qry = qry + " sum(  CASE WHEN cdganalisis='52350003' THEN coalesce(resnum,0) else null  end) r52350003, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='52350005' THEN coalesce(resnum,0) else NULL end ) r25300005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='52350010' THEN coalesce(resnum,0) else null  end) r25300010,  "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51850005' THEN coalesce(resnum,0) else NULL end ) r51850005, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='51850010' THEN coalesce(resnum,0) else NULL END ) r51850010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250010' THEN coalesce(resnum,0) else NULL END ) r34250010, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250025' THEN coalesce(resnum,0) else NULL END ) r34250025, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250015' THEN coalesce(resnum,0) else NULL END ) r34250015, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250035' THEN coalesce(resnum,0) else NULL END ) r34250035, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250060' THEN coalesce(resnum,0) else NULL END ) r34250060, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='34250045' THEN coalesce(resnum,0) else NULL END ) r34250045, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='22010021' THEN coalesce(resnum,0) else null END) r22010021, "
-        qry = qry + " sum(  CASE WHEN cdganalisis='22010004' THEN coalesce(resnum,0) else NULL end) r22010004 "
+        qry = "select sum( CASE WHEN cdganalisis='24660010' THEN coalesce(resnum,0) else 0 end  ) r24660010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24660015' THEN coalesce(resnum,0) else 0 end ) r24660015, "
+        qry = qry + " sum( CASE WHEN cdganalisis='24660020' THEN coalesce(resnum,0) else 0 end ) r24660020,  "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24630010' THEN coalesce(resnum,0) else 0 end  ) r24630010,  "
+        qry = qry + " sum( CASE WHEN cdganalisis='24630015' THEN coalesce(resnum,0) else 0 end  ) r24630015,  "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24630020' THEN coalesce(resnum,0) else 0 end  ) r24630020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24630030' THEN coalesce(resnum,0) else 0 end  ) r24630030, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24630060' THEN coalesce(resnum,0) else 0 end  ) r24630060, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24630260' THEN coalesce(resnum,0) else 0 end  ) r24630260, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640010' THEN coalesce(resnum,0) else 0 end  ) r24640010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640015' THEN coalesce(resnum,0) else 0 end  ) r24640015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640020' THEN coalesce(resnum,0) else 0 end  )  r24640020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640030' THEN coalesce(resnum,0) else 0 end  ) r24640030, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640060' THEN coalesce(resnum,0) else 0 end  ) r24640060, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24640260' THEN coalesce(resnum,0) else 0 end  ) r24640260, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650010' THEN coalesce(resnum,0) else 0 end  ) r24650010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650015' THEN coalesce(resnum,0) else 0 end ) r24650015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650020' THEN coalesce(resnum,0) else 0 end ) r24650020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650030' THEN coalesce(resnum,0) else 0 end ) r24650030, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650060' THEN coalesce(resnum,0) else 0 end ) r24650060, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24650260' THEN coalesce(resnum,0) else 0 end  ) r24650260, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24660030' THEN coalesce(resnum,0) else 0 end ) r24660030, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='24660260' THEN coalesce(resnum,0) else 0 end  ) r24660260, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100010' THEN coalesce(resnum,0) else 0 end  ) r34100010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100025' THEN coalesce(resnum,0) else 0 end  ) r34100025, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100015' THEN coalesce(resnum,0) else 0 end  ) r34100015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100020' THEN coalesce(resnum,0) else 0 end  ) r34100020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100060' THEN coalesce(resnum,0) else 0 end  ) r34100060, "
+        qry = qry + " sum( CASE WHEN cdganalisis='34100035' THEN coalesce(resnum,0) else 0 end  ) r34100035, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34100045' THEN coalesce(resnum,0) else 0 end  ) r34100045, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170010' THEN coalesce(resnum,0) else 0 end  ) r34170010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170025' THEN coalesce(resnum,0) else 0 end  ) r34170025, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170015' THEN coalesce(resnum,0) else 0 end  ) r34170015,  "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170020' THEN coalesce(resnum,0) else 0 end  ) r34170020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170060' THEN coalesce(resnum,0) else 0 end ) r34170060, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170035' THEN coalesce(resnum,0) else 0 end  ) r34170035, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34170045' THEN coalesce(resnum,0) else 0 end  ) r34170045, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50340005' THEN coalesce(resnum,0) else 0 end  ) r50340005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50350010' THEN coalesce(resnum,0) else 0 end ) r50350010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50350020' THEN coalesce(resnum,0) else 0 end  ) r50350020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50700004' THEN coalesce(resnum,0) else 0 end  ) r50700004, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50700010' THEN coalesce(resnum,0) else 0 end ) r50700010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900005' THEN coalesce(resnum,0) else 0 end  ) r50900005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900004' THEN coalesce(resnum,0) else 0 end ) r50900004, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900010' THEN coalesce(resnum,0) else 0 end  ) r50900010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900015' THEN coalesce(resnum,0) else 0 end  ) r50900015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900020' THEN coalesce(resnum,0) else 0 end  ) r50900020, " 
+        qry = qry + " sum(  CASE WHEN cdganalisis='50900025' THEN coalesce(resnum,0) else 0 end  ) r50900025, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='25300020' THEN coalesce(resnum,0) else 0 end  ) r25300020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51350005' THEN coalesce(resnum,0) else 0 end  ) r51350005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51350010' THEN coalesce(resnum,0) else 0 end ) r51350010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51350050' THEN coalesce(resnum,0) else 0 end ) r50250050, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51600010' THEN coalesce(resnum,0) else 0 end ) r51600010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50300005' THEN coalesce(resnum,0) else 0 end ) r50300005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50300015' THEN coalesce(resnum,0) else 0 end ) r50300015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='31150100' THEN coalesce(resnum,0) else 0 end ) r31150100, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='31150110' THEN coalesce(resnum,0) else 0 end ) r31150110, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='31150080' THEN coalesce(resnum,0) else 0 end ) r31150080, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='50390010' THEN coalesce(resnum,0) else 0 end ) r50390010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51270020' THEN coalesce(resnum,0) else 0 end ) r51270020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51270030' THEN coalesce(resnum,0) else 0 end ) r51270030, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51270010' THEN coalesce(resnum,0) else 0 end ) r51270010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51280010' THEN coalesce(resnum,0) else 0 end ) r51280010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51280020' THEN coalesce(resnum,0) else 0 end ) r51280020, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='52350010' THEN coalesce(resnum,0) else 0 end ) r52350010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='52350020' THEN coalesce(resnum,0) else 0 end  ) r52350020, " 
+        qry = qry + " sum(  CASE WHEN cdganalisis='52350003' THEN coalesce(resnum,0) else 0 end) r52350003, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='52350005' THEN coalesce(resnum,0) else 0 end  ) r25300005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='52350010' THEN coalesce(resnum,0) else 0 end) r25300010,  "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51850005' THEN coalesce(resnum,0) else 0 end  ) r51850005, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='51850010' THEN coalesce(resnum,0) else 0 end  ) r51850010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250010' THEN coalesce(resnum,0) else 0 end  ) r34250010, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250025' THEN coalesce(resnum,0) else 0 end  ) r34250025, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250015' THEN coalesce(resnum,0) else 0 end  ) r34250015, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250035' THEN coalesce(resnum,0) else 0 end  ) r34250035, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250060' THEN coalesce(resnum,0) else 0 end  ) r34250060, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='34250045' THEN coalesce(resnum,0) else 0 end  ) r34250045, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='22010021' THEN coalesce(resnum,0) else 0 end ) r22010021, "
+        qry = qry + " sum(  CASE WHEN cdganalisis='22010004' THEN coalesce(resnum,0) else 0 end ) r22010004 "
         qry = qry + " from resultado where codage='"+age+"' and numorden=" + ord
    
         response_par = sdk.executeQueryPostgresSelect(qry, str(stage))
         for objp in response_par:
-            r24660010=objp['24660010']
-            r24660015=objp['24660015']
-            r24660020=objp['24660020']
-            r24630010=objp['24630010']
-            r24630015=objp['24630015']
-            r24630020=objp['24630020']
-            r24630030=objp['24630030']
-            r24630060=objp['24630060']
-            r24630260=objp['24630260']
-            r24640010=objp['24640010']
-            r24640015=objp['24640015']
-            r24640020=objp['24640020']
-            r24640030=objp['24640030']
-            r24640060=objp['24640060']
-            r24640260=objp['24640260']
-            r24650010=objp['24650010']
-            r24650015=objp['24650015']
-            r24650020=objp['24650020']
-            r24650030=objp['24650030']
-            r24650060=objp['24650060']
-            r24650260=objp['24650260']
-            r24660030=objp['24660030']
-            r24660260=objp['24660260']
-            r34100010=objp['34100010']
-            r34100025=objp['34100025']
-            r34100015=objp['34100015']
-            r34100020=objp['34100020']
-            r34100060=objp['34100060']
-            r34100035=objp['34100035']
-            r34100045=objp['34100045']
-            r34170010=objp['34170010']
-            r34170025=objp['34170025']
-            r34170015=objp['34170015']
-            r34170020=objp['34170020']
-            r34170060=objp['34170060']
-            r34170035=objp['34170035']
-            r34170045=objp['34170045']
-            r50340005=objp['50340005']
-            r50350010=objp['50350010']
-            r50350020=objp['50350020']
-            r50700004=objp['50700004']
-            r50700010=objp['50700010']
-            r50900005=objp['50900005']
-            r50900004=objp['50900004']
-            r50900010=objp['50900010']
-            r50900015=objp['50900015']
-            r50900020=objp['50900020']
-            r50900025=objp['50900025']
-            r25300020=objp['25300020']
-            r51350005=objp['51350005']
-            r51350010=objp['51350010']
-            r50250050=objp['50250050']
-            r51600010=objp['51600010']
-            r50300005=objp['50300005']
-            r50300015=objp['50300015']
-            r31150100=objp['31150100']
-            r31150110=objp['31150110']
-            r31150080=objp['31150080']
-            r50390010=objp['50390010']
-            r51270020=objp['51270020']
-            r51270030=objp['51270030']
-            r51270010=objp['51270010']
-            r51280010=objp['51280010']
-            r51280020=objp['51280020']
-            r52350010=objp['52350010']
-            r52350020=objp['52350020']
-            r52350003=objp['52350003']
-            r25300005=objp['25300005']
-            r25300010=objp['25300010']
-            r51850005=objp['51850005']
-            r51850010=objp['51850010']
-            r34250010=objp['34250010']
-            r34250025=objp['34250025']
-            r34250015=objp['34250015']
-            r34250035=objp['34250035']
-            r34250060=objp['34250060']
-            r34250045=objp['34250045']
-            r22010021=objp['22010021']
-            r22010004=objp['22010004']
+            r24660010=float( objp['r24660010'])
+            r24660015=float(objp['r24660015'])
+            r24660020=float(objp['r24660020'])
+            r24630010=float(objp['r24630010'])
+            r24630015=float(objp['r24630015'])
+            r24630020=float(objp['r24630020'])
+            r24630030=float(objp['r24630030'])
+            r24630060=float(objp['r24630060'])
+            r24630260=float(objp['r24630260'])
+            r24640010=float(objp['r24640010'])
+            r24640015=float(objp['r24640015'])
+            r24640020=float(objp['r24640020'])
+            r24640030=float(objp['r24640030'])
+            r24640060=float(objp['r24640060'])
+            r24640260=float(objp['r24640260'])
+            r24650010=float(objp['r24650010'])
+            r24650015=float(objp['r24650015'])
+            r24650020=float(objp['r24650020'])
+            r24650030=float(objp['r24650030'])
+            r24650060=float(objp['r24650060'])
+            r24650260=float(objp['r24650260'])
+            r24660030=float(objp['r24660030'])
+            r24660260=float(objp['r24660260'])
+            r34100010=float(objp['r34100010'])
+            r34100025=float(objp['r34100025'])
+            r34100015=float(objp['r34100015'])
+            r34100020=float(objp['r34100020'])
+            r34100060=float(objp['r34100060'])
+            r34100035=float(objp['r34100035'])
+            r34100045=float(objp['r34100045'])
+            r34170010=float(objp['r34170010'])
+            r34170025=float(objp['r34170025'])
+            r34170015=float(objp['r34170015'])
+            r34170020=float(objp['r34170020'])
+            r34170060=float(objp['r34170060'])
+            r34170035=float(objp['r34170035'])
+            r34170045=float(objp['r34170045'])
+            r50340005=float(objp['r50340005'])
+            r50350010=float(objp['r50350010'])
+            r50350020=float(objp['r50350020'])
+            r50700004=float(objp['r50700004'])
+            r50700010=float(objp['r50700010'])
+            r50900005=float(objp['r50900005'])
+            r50900004=float(objp['r50900004'])
+            r50900010=float(objp['r50900010'])
+            r50900015=float(objp['r50900015'])
+            r50900020=float(objp['r50900020'])
+            r50900025=float(objp['r50900025'])
+            r25300020=float(objp['r25300020'])
+            r51350005=float(objp['r51350005'])
+            r51350010=float(objp['r51350010'])
+            r50250050=float(objp['r50250050'])
+            r51600010=float(objp['r51600010'])
+            r50300005=float(objp['r50300005'])
+            r50300015=float(objp['r50300015'])
+            r31150100=float(objp['r31150100'])
+            r31150110=float(objp['r31150110'])
+            r31150080=float(objp['r31150080'])
+            r50390010=float(objp['r50390010'])
+            r51270020=float(objp['r51270020'])
+            r51270030=float(objp['r51270030'])
+            r51270010=float(objp['r51270010'])
+            r51280010=float(objp['r51280010'])
+            r51280020=float(objp['r51280020'])
+            r52350010=float(objp['r52350010'])
+            r52350020=float(objp['r52350020'])
+            r52350003=float(objp['r52350003'])
+            r25300005=float(objp['r25300005'])
+            r25300010=float(objp['r25300010'])
+            r51850005=float(objp['r51850005'])
+            r51850010=float(objp['r51850010'])
+            r34250010=float(objp['r34250010'])
+            r34250025=float(objp['r34250025'])
+            r34250015=float(objp['r34250015'])
+            r34250035=float(objp['r34250035'])
+            r34250060=float(objp['r34250060'])
+            r34250045=float(objp['r34250045'])
+            r22010021=float(objp['r22010021'])
+            r22010004=float(objp['r22010004'])
 
-            # resolver formulas
+           # resolver formulas
 
             v34100020 = r34100010*r34100015 / 100
             v34100030 = v34100020*r34100025 / 100
@@ -1433,6 +1454,8 @@ def conexion_postgres(body:dict, codage:str,numorden:str):
     va_medic_request = '' # medico que esta solicitando el resultado
     va_empresa_reques = '' # empresa del usuario q solicita el resultado
     va_totusu = 0
+    print('usuario:')
+    print(usuario)
     if (usuario==""):
         va_tipousuario = 'X'
     else:      
@@ -4037,7 +4060,60 @@ def delete_data(id: str):
 
 
 
+# ************************ forbuilder ******************************
+
+ # ---------------- tabla: zbuilderd---------- 
+# Endpoint Update 
+@app.put('/zbuilderd/update/{id}') 
+def update_data(data: dict,id:str):  
+	vacios = '' 
+	if data['datos']['forma'] =='':data['datos']['forma'] = None 
+	if data['datos']['forma'] == None:vacios = vacios +','+ 'forma' 
+	if data['datos']['campo'] =='':data['datos']['campo'] = None 
+	if data['datos']['campo'] == None:vacios = vacios +','+ 'campo' 
+	if (vacios!=''):raise HTTPException(status_code=400, detail= vacios + ' debe ser diligenciado') 
+	try:
+		query="update zbuilderd set forma='"+data['datos']['forma']+"',campo='"+data['datos']['campo']+"',titulo='"+data['datos']['titulo']+"',tipo='"+data['datos']['tipo']+"',llave='"+data['datos']['llave']+"',control='"+data['datos']['control']+"',lov='"+data['datos']['lov']+"',camel='"+data['datos']['camel']+"',visible='"+data['datos']['visible']+"',inicial='"+data['datos']['inicial']+"'  where id='"+id+"'"  
+		query = query.replace("", "null")   
+		sdk.updatePostgres(query, data,'prd') 
+		return {'statusCode': 200,'resultado': 'success'} 
+	except Exception as e:raise HTTPException(status_code=400, detail=str(e)) 
+# Endpoint Select 
+@app.get('/zbuilderd/select') 
+def conexion_postgres(): 
+	query = 'SELECT id,forma,campo,titulo,tipo,llave,control,lov,camel,visible,inicial from zbuilderd order by 1' 
+	response_query = sdk.executeQueryPostgresSelect(query, str(stage)) 
+	return {'data': list(response_query)}  
+# Endpoint insert 
+@app.post('/zbuilderd/insert') 
+def insert_data(data: dict): 
+	vacios = '' 
+	if data['datos']['forma'] =='':data['datos']['forma'] = None 
+	if data['datos']['forma'] == None:vacios = vacios +','+ 'forma' 
+	if data['datos']['campo'] =='':data['datos']['campo'] = None 
+	if data['datos']['campo'] == None:vacios = vacios +','+ 'campo' 
+	if (vacios!=''):raise HTTPException(status_code=400, detail= vacios + ' debe ser diligenciado') 
+	try:
+		query="insert into zbuilderd(forma,campo,titulo,tipo,llave,control,lov,camel,visible,inicial) values ('"+data['datos']['forma']+"','"+data['datos']['campo']+"','"+data['datos']['titulo']+"','"+data['datos']['tipo']+"','"+data['datos']['llave']+"','"+data['datos']['control']+"','"+data['datos']['lov']+"','"+data['datos']['camel']+"','"+data['datos']['visible']+"','"+data['datos']['inicial']+"')" 
+		query = query.replace("", "null")   
+		sdk.insertPostgres(query, data,'prd') 
+		return {'statusCode': 200,'resultado': 'success'} 
+	except Exception as e:raise HTTPException(status_code=400, detail=str(e)) 
+# Endpoint delete 
+@app.delete('/zbuilderd/delete/{id}') 
+def delete_data(data:dict, id: str): 
+	try:
+		query="delete from zbuilderd where id='"+id+"'"  
+		response_query = sdk.deletePostgres(query, str(stage)) 
+		return {'statusCode': 200,'resultado': 'success'} 
+	except Exception as e:raise HTTPException(status_code=400, detail=str(e)) 
+
+
+
 # ******************** fin CRUD ********************************************
+
+
+
 
 
 ###############################################################################
